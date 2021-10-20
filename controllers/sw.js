@@ -52,10 +52,9 @@ module.exports = function (router) {
           method: "get",
           responseType: "json",
         })
-  
-        if(!pilot.data)
-          throw new Error(`Pilot not found for ${pilotURL}`)
-  
+
+        if (!pilot.data) throw new Error(`Pilot not found for ${pilotURL}`)
+
         pilotNames.push(pilot.data.name)
       }
     } catch (error) {
@@ -64,7 +63,57 @@ module.exports = function (router) {
 
     return response.json({
       ...mostPilotStarship,
-      pilots:  pilotNames
+      pilots: pilotNames,
+    })
+  })
+
+  router.get("/sw/planets-most", async (request, response) => {
+    let planets
+
+    try {
+      planets = await fetchSWData("http://swapi.dev/api/planets/?page=1")
+    } catch (error) {
+      return response.status(422).send("Error fetching the data")
+    }
+
+    /**
+     * Filter out planets which contain garbage data
+     * some planets has "unkown" value for both rotation_period and orbital_period 
+     * some planets has "0" value for both rotation_period and orbital_period 
+     * */ 
+    const filteredPlanets = _.filter(planets, function (o) {
+      const rotationPeriod = _.toNumber(o.rotation_period)
+      const orbitalPeriod = _.toNumber(o.orbital_period)
+
+      const isNan = _.isNaN(rotationPeriod) && _.isNaN(orbitalPeriod)
+      const isPositiveNumber = rotationPeriod > 0 && orbitalPeriod > 0
+
+      return !isNan && isPositiveNumber
+    })
+
+    const biggestRatioPlanets = _.orderBy(
+      filteredPlanets,
+      [
+        function (o) {
+          return _.toNumber(o.orbital_period) / _.toNumber(o.rotation_period)
+        },
+      ],
+      ["desc"]
+    )
+
+    const mostCharacterBornPlanets = _.orderBy(
+      biggestRatioPlanets,
+      [
+        function (o) {
+          return o.residents.length
+        },
+      ],
+      ["desc"]
+    )
+
+    return response.json({
+      biggest_ratio_planet: biggestRatioPlanets[0],
+      most_character_born_planet: mostCharacterBornPlanets[0]
     })
   })
 }
